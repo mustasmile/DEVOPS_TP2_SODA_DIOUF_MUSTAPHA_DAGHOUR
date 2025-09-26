@@ -1,0 +1,12 @@
+# Configuration Air pour hot reload
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Commande pour compiler ton binaire
+  cmd = "go build -o ./tmp/guestbook main.go"
+  # Emplacement du binaire généré
+  bin = "tmp/guestbook"
+  include_ext = ["go"]
+  exclude_dir = ["vendor", "tmp"]
+  delay = 1000 # ms avant de relancer après un changement
