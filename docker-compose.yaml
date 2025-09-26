@@ -15,6 +15,7 @@ services:
 
   jupyter:
     image: jupyter/datascience-notebook:latest
+    user: root
     ports:
       - "8888:8888"
     volumes:
@@ -23,9 +24,10 @@ services:
     environment:
       - JUPYTER_ENABLE_LAB=yes
       - JUPYTER_TOKEN=monmotdepasse
+      - CHOWN_HOME=yes
+      - CHOWN_HOME_OPTS=-R
 
 volumes:
   redis_data:
   jupyter_notebooks:
   jupyter_data:
-

@@ -1,0 +1,85 @@
+### Apprentissages
+Déployer et développer une application Guestbook en Go à 
+l’aide de Docker et Docker Compose. L’application devait être accessible en local, utiliser Redis comme base de données, disposer 
+d’un environnement de développement avec hot‑reload et intégrer JupyterLab. L’objectif était aussi de documenter les difficultés et les solutions rencontrées.
+
+### Problèmes rencontrés et pourquoi ils sont survenus
+
+Absence de dossier public/ : le sujet prévoyait de copier un dossier public dans l’image Docker, mais l’application Go fournie ne servait
+ aucun fichier statique. Le Dockerfile contenait donc une commande COPY /app/public qui échouait.
+
+Port 3000 occupé : un processus Go laissé en arrière‑plan occupait le port 3000, ce qui empêchait le conteneur guestbook d’écouter
+ sur ce port (listen tcp :3000: bind: address already in use).
+
+Redis déjà installé : dans WSL, redis-server tournait comme service système et occupait le port 6379, provoquant des erreurs lors
+ du lancement du conteneur Redis (failed to bind host port).
+
+Multi‑stage build trop lourde : la première image buildée pesait plus de 300 MB car elle embarquait tout l’outillage Go. 
+Le sujet demandait une image finale inférieure à 20 MB.
+
+Installation d’Air : l’outil de hot‑reload Air n’était plus disponible à l’URL historique github.com/cosmtrek/air
+ et nécessitait Go ≥ 1.25. Les installations échouaient avec des erreurs de module.
+
+Permissions sur JupyterLab : lors de l’ajout du service Jupyter, la persistance des paquets Python via un volume 
+sur /home/jovyan/.local provoquait une erreur de permission (PermissionError: [Errno 13] Permission denied: '/home/jovyan/.local/share').
+
+Accès aux ports en mode WSL : initialement les ports (3000 et 8888) n’étaient accessibles qu’en local. L’étape 7 
+du TP demandait de rendre l’application accessible sur le réseau local, ce qui implique d’identifier l’adresse IP de la machine sous WSL et d’ouvrir les ports.
+
+### Solutions apportées et pourquoi elles ont fonctionné
+
+Suppression de la copie du dossier public : en supprimant la ligne COPY /app/public, le Dockerfile correspondait au code réel et l’image se construisait sans erreur.
+
+Libérer les ports : utilisation de sudo lsof -i :3000 puis kill -9 <PID> pour terminer le processus Go bloquant. 
+Pour Redis installé en service, arrêt du service redis-server via sudo systemctl stop redis pour libérer le port 6379.
+
+Ne pas exposer Redis en dehors du réseau Docker : supprimer la section ports: "6379:6379" dans 
+le service redis de docker-compose.yaml évite tout conflit avec un service Redis installé localement et est suffisant puisque l’application y accède via le réseau interne Docker.
+
+Optimisation du Dockerfile : adoption d’une build multi‑étapes avec scratch pour la phase finale et
+ compilation statique (CGO_ENABLED=0 GOOS=linux go build). L’image finale est devenue inférieure à 10 MB, respectant l’objectif.
+
+Installation d’Air avec Go 1.25 et bon dépôt : modification du Dockerfile.dev pour utiliser FROM golang:1.25-alpine
+ et installer Air depuis le dépôt correct github.com/air-verse/air@latest, conformément aux exigences du projet
+github.com
+. L’ajout d’un fichier .air.toml et d’un docker-compose.dev.yaml avec un volume monté (.:/app)
+ permet à Air de détecter et recompiler automatiquement le code.
+
+Résolution des problèmes de permission Jupyter : ajout des variables d’environnement CHOWN_HOME=yes 
+et CHOWN_HOME_OPTS=-R ainsi que de user: root dans le service jupyter. Ces options font en sorte que le script de démarrage
+ de Jupyter réattribue la propriété des répertoires montés à l’utilisateur jovyan, évitant l’erreur de permission
+jupyter-docker-stacks.readthedocs.io
+.
+
+Accès réseau :
+
+Les lignes ports: "3000:3000" et ports: "8888:8888" de docker-compose.yaml lient 
+automatiquement les ports des conteneurs à toutes les interfaces de la machine hôte (0.0.0.0). Aucun changement n’est nécessaire pour exposer les services.
+
+Pour partager l’application sur le réseau local, il suffit de récupérer l’adresse
+ IP locale (par exemple via hostname -I dans WSL ou ipconfig sur Windows) et de communiquer 
+ l’URL complète : http://<IP>:3000 pour Guestbook et http://<IP>:8888/?token=<token> pour Jupyter. Il peut être nécessaire d’ouvrir ces ports dans le pare‑feu.
+
+Nouvelles connaissances et pertinence
+
+Docker multi‑étapes : séparer les phases de compilation et d’exécution 
+permet d’obtenir des images plus petites et plus sûres. En ne gardant que le
+ binaire compilé et les fichiers strictement nécessaires, on réduit la surface d’attaque et la consommation d’espace disque.
+
+Isolation des services : exposer les ports uniquement quand c’est nécessaire 
+évite des conflits et renforce la sécurité. Pour les services internes comme Redis, il est préférable de ne pas lier le port à l’hôte.
+
+Hot‑reload avec Air : l’utilisation d’Air et d’un docker-compose.dev.yaml améliore
+ la productivité en permettant de voir immédiatement les modifications du code sans 
+ reconstruire l’image. Il est essentiel d’utiliser la bonne version de Go et le bon dépôt pour installer Air
+github.com
+.
+
+Gestion des permissions avec JupyterLab : monter un volume 
+dans /home/jovyan peut nécessiter de réassigner les permissions via les 
+variables CHOWN_HOME/CHOWN_HOME_OPTS et d’exécuter le conteneur en tant que root, comme recommandé par la documentation officielle des Jupyter Docker Stacks
+jupyter-docker-stacks.readthedocs.io
+.
+
+Réseau WSL : pour partager une application tournée sous WSL, il suffit de récupérer l’IP de la machine et d’indiquer aux utilisateurs 
+d’accéder via cette adresse. Les ports déclarés dans docker-compose.yaml sont accessibles sur toutes les interfaces par défaut.
