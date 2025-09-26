@@ -13,5 +13,19 @@ services:
     depends_on:
       - redis
 
+  jupyter:
+    image: jupyter/datascience-notebook:latest
+    ports:
+      - "8888:8888"
+    volumes:
+      - jupyter_notebooks:/home/jovyan/work
+      - jupyter_data:/home/jovyan/.local
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=monmotdepasse
+
 volumes:
   redis_data:
+  jupyter_notebooks:
+  jupyter_data:
+
